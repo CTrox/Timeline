@@ -1,14 +1,17 @@
 package ctrox.ch.timeline;
 
 import android.Manifest;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.View;
 import android.support.design.widget.NavigationView;
@@ -35,6 +38,8 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
@@ -49,8 +54,12 @@ import java.util.Map;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener, OnMapReadyCallback {
-  private static final int FINE_LOCATION_REQUEST = 242;
   private static final String TAG = "MainActivity";
+  // minimum timeout for location updates
+  private static final int MIN_TIME = 0;
+  // minimum distance to trigger location updates in meters
+  private static final int MIN_DISTANCE = 10;
+  private static final int FINE_LOCATION_REQUEST = 242;
 
   private Database mDatabase;
 
@@ -71,11 +80,18 @@ public class MainActivity extends AppCompatActivity
     fab.setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        Snackbar.make(view, "Tracking Location...", Snackbar.LENGTH_LONG)
-                .setAction("Action", null).show();
         if (checkPermission()) {
+          Snackbar.make(view, "Tracking Location...", Snackbar.LENGTH_LONG)
+                  .setAction("Action", null).show();
+          Log.i(TAG, "registering location updates");
           Intent serviceIntent = new Intent(context, LocationService.class);
-          startService(serviceIntent);
+          serviceIntent.setAction(LocationService.ACTION);
+          PendingIntent pendingIntent = PendingIntent.getService(context, 1,
+                  serviceIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+          LocationManager locationManager = (LocationManager) context.getSystemService(Context
+                  .LOCATION_SERVICE);
+          locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, MIN_TIME, MIN_DISTANCE,
+                  pendingIntent);
         }
       }
     });
@@ -136,19 +152,21 @@ public class MainActivity extends AppCompatActivity
     map.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16.0f));
   }
 
-  private List<LatLng> getLocationPoints(Database database) {
+  private class LocationHistory {
+    List<LatLng> points = new ArrayList<>();
+    List<Double> accuracy = new ArrayList<>();
+  }
+
+  private LocationHistory getLocationPoints(Database database) {
     List<LatLng> points = new ArrayList<>();
 
     com.couchbase.lite.View locationView = database.getView("locations");
     locationView.setMap(new Mapper() {
       @Override
       public void map(Map<String, Object> document, Emitter emitter) {
-        Long timestamp = (Long)document.get("timestamp");
-        if ((timestamp).compareTo(getStartOfDay(new Date()).getTime()) > 0) {
-          emitter.emit(document.get("timestamp"), null);
-        }
+        emitter.emit(document.get("timestamp"), null);
       }
-    }, "4");
+    }, "6.0");
 
     Query query = database.getView("locations").createQuery();
     QueryEnumerator result = null;
@@ -157,24 +175,39 @@ public class MainActivity extends AppCompatActivity
     } catch (CouchbaseLiteException e) {
       e.printStackTrace();
     }
+    LocationHistory locationHistory = new LocationHistory();
     for (Iterator<QueryRow> it = result; it.hasNext(); ) {
       QueryRow row = it.next();
       Document document = row.getDocument();
-      Log.i(TAG, "timestamp: "+ document.getProperty("timestamp"));
-
-      points.add(new LatLng((double)document.getProperty("latitude"), (double)document.getProperty
-              ("longitude")));
+      Long timestamp = (Long)document.getProperty("timestamp");
+      if ((timestamp).compareTo(getStartOfDay(new Date()).getTime()) > 0) {
+        points.add(new LatLng((double)document.getProperty("latitude"), (double)document.getProperty
+                ("longitude")));
+        locationHistory.accuracy.add((double)document.getProperty("accuracy"));
+        Log.i(TAG, "timestamp: "+ document.getProperty("timestamp"));
+      }
     }
-    return points;
+    locationHistory.points = points;
+    return locationHistory;
   }
 
-  private void displayLocationHistory(GoogleMap map, List<LatLng> points) {
+  private void displayLocationHistory(GoogleMap map, LocationHistory locationHistory) {
+    List<LatLng> points = locationHistory.points;
+    List<Double> accuracy = locationHistory.accuracy;
     Polyline line = map.addPolyline(new PolylineOptions()
             .width(5)
-            .color(Color.RED));
+            .color(ContextCompat.getColor(getApplicationContext(), R.color.colorAccentTransparent)));
     line.setPoints(points);
     if (points.size() > 0) {
       animateMap(points.get(points.size() - 1), map);
+    }
+    int index = 0;
+    for (LatLng point : points) {
+      map.addCircle(new CircleOptions()
+        .center(point)
+        .radius(accuracy.get(index))
+        .strokeColor(ContextCompat.getColor(getApplicationContext(), R.color.colorPrimaryTransparent)));
+      index++;
     }
   }
 
