@@ -75,6 +75,7 @@ public class MainActivity extends AppCompatActivity
     mapFragment.getMapAsync(this);
 
     mDatabase = setupCouchbase();
+    setupView(mDatabase);
 
     FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
     fab.setOnClickListener(new View.OnClickListener() {
@@ -142,10 +143,21 @@ public class MainActivity extends AppCompatActivity
     return database;
   }
 
+  private void setupView(Database database) {
+    com.couchbase.lite.View locationView = database.getView("locations");
+    locationView.setMap(new Mapper() {
+      @Override
+      public void map(Map<String, Object> document, Emitter emitter) {
+        emitter.emit(document.get("timestamp"), null);
+      }
+    }, "6.0");
+  }
+
   @Override
   public void onMapReady(GoogleMap map) {
     // Get location LatLng's from DB and display on map
-    displayLocationHistory(map, getLocationPoints(mDatabase));
+    displayLocationHistory(map, getLocationPoints(mDatabase, getStartOfDay(new Date()).getTime()
+            , getEndOfDay(new Date()).getTime()));
   }
 
   private void animateMap(LatLng latLng, GoogleMap map) {
@@ -157,18 +169,12 @@ public class MainActivity extends AppCompatActivity
     List<Double> accuracy = new ArrayList<>();
   }
 
-  private LocationHistory getLocationPoints(Database database) {
+  private LocationHistory getLocationPoints(Database database, Long startTime, Long endTime) {
     List<LatLng> points = new ArrayList<>();
 
-    com.couchbase.lite.View locationView = database.getView("locations");
-    locationView.setMap(new Mapper() {
-      @Override
-      public void map(Map<String, Object> document, Emitter emitter) {
-        emitter.emit(document.get("timestamp"), null);
-      }
-    }, "6.0");
-
     Query query = database.getView("locations").createQuery();
+    query.setStartKey(startTime);
+    query.setEndKey(endTime);
     QueryEnumerator result = null;
     try {
       result = query.run();
@@ -179,13 +185,9 @@ public class MainActivity extends AppCompatActivity
     for (Iterator<QueryRow> it = result; it.hasNext(); ) {
       QueryRow row = it.next();
       Document document = row.getDocument();
-      Long timestamp = (Long)document.getProperty("timestamp");
-      if ((timestamp).compareTo(getStartOfDay(new Date()).getTime()) > 0) {
-        points.add(new LatLng((double)document.getProperty("latitude"), (double)document.getProperty
+      points.add(new LatLng((double)document.getProperty("latitude"), (double)document.getProperty
                 ("longitude")));
-        locationHistory.accuracy.add((double)document.getProperty("accuracy"));
-        Log.i(TAG, "timestamp: "+ document.getProperty("timestamp"));
-      }
+      locationHistory.accuracy.add((double)document.getProperty("accuracy"));
     }
     locationHistory.points = points;
     return locationHistory;
