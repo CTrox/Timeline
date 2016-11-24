@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
@@ -51,6 +52,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener, OnMapReadyCallback {
@@ -156,7 +158,7 @@ public class MainActivity extends AppCompatActivity
   @Override
   public void onMapReady(GoogleMap map) {
     // Get location LatLng's from DB and display on map
-    displayLocationHistory(map, getLocationPoints(mDatabase, getStartOfDay(new Date()).getTime()
+    displayLocationHistory(map, getLocationRecords(mDatabase, getStartOfDay(new Date()).getTime()
             , getEndOfDay(new Date()).getTime()));
   }
 
@@ -164,14 +166,7 @@ public class MainActivity extends AppCompatActivity
     map.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16.0f));
   }
 
-  private class LocationHistory {
-    List<LatLng> points = new ArrayList<>();
-    List<Double> accuracy = new ArrayList<>();
-  }
-
-  private LocationHistory getLocationPoints(Database database, Long startTime, Long endTime) {
-    List<LatLng> points = new ArrayList<>();
-
+  private List<LocationRecord> getLocationRecords(Database database, Long startTime, Long endTime) {
     Query query = database.getView("locations").createQuery();
     query.setStartKey(startTime);
     query.setEndKey(endTime);
@@ -181,35 +176,42 @@ public class MainActivity extends AppCompatActivity
     } catch (CouchbaseLiteException e) {
       e.printStackTrace();
     }
-    LocationHistory locationHistory = new LocationHistory();
+    List<LocationRecord> locationList = new ArrayList<>();
     for (Iterator<QueryRow> it = result; it.hasNext(); ) {
+      LocationRecord locationRecord = new LocationRecord();
       QueryRow row = it.next();
       Document document = row.getDocument();
-      points.add(new LatLng((double)document.getProperty("latitude"), (double)document.getProperty
-                ("longitude")));
-      locationHistory.accuracy.add((double)document.getProperty("accuracy"));
+      Object timestamp = document.getProperty("timestamp");
+      Object latitude = document.getProperty("latitude");
+      Object longitude = document.getProperty("longitude");
+      Object accuracy = document.getProperty("accuracy");
+      // check if record exists
+      if (timestamp != null) {
+        locationRecord.setDatetime((long)timestamp);
+        locationRecord.setLatLng(new LatLng((double)latitude, (double)longitude));
+        locationRecord.setAccuracy((double)accuracy);
+        locationList.add(locationRecord);
+      }
     }
-    locationHistory.points = points;
-    return locationHistory;
+    return locationList;
   }
 
-  private void displayLocationHistory(GoogleMap map, LocationHistory locationHistory) {
-    List<LatLng> points = locationHistory.points;
-    List<Double> accuracy = locationHistory.accuracy;
+  private void displayLocationHistory(GoogleMap map, List<LocationRecord> locationList) {
+    List<LatLng> points = new ArrayList<>();
+    for (LocationRecord location : locationList) {
+      points.add(location.getLatLng());
+      map.addCircle(new CircleOptions()
+              .center(location.getLatLng())
+              .radius(location.getAccuracy())
+              .strokeColor(ContextCompat.getColor(getApplicationContext(), R.color.colorPrimaryTransparent)));
+    }
     Polyline line = map.addPolyline(new PolylineOptions()
             .width(5)
             .color(ContextCompat.getColor(getApplicationContext(), R.color.colorAccentTransparent)));
     line.setPoints(points);
     if (points.size() > 0) {
+      // zoom map into the last point
       animateMap(points.get(points.size() - 1), map);
-    }
-    int index = 0;
-    for (LatLng point : points) {
-      map.addCircle(new CircleOptions()
-        .center(point)
-        .radius(accuracy.get(index))
-        .strokeColor(ContextCompat.getColor(getApplicationContext(), R.color.colorPrimaryTransparent)));
-      index++;
     }
   }
 
