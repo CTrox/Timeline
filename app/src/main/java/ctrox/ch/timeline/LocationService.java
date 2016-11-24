@@ -14,13 +14,13 @@ import com.couchbase.lite.Manager;
 import com.couchbase.lite.android.AndroidContext;
 
 import java.io.IOException;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
 
 /**
- * Created by cyrill on 11/19/16.
+ * Location IntentService
+ * Gets called on location updates and stores it in db
  */
 
 public class LocationService extends IntentService {
@@ -40,9 +40,8 @@ public class LocationService extends IntentService {
 
   @Override
   protected void onHandleIntent(Intent intent) {
-    Log.i(TAG_LOCATIONTRACKER, "I have been called " + intent.getAction());
-    if (intent.getExtras() != null) {
-
+    if (intent.getAction().equals(ACTION) && intent.getExtras() != null) {
+      Log.i(TAG_LOCATIONTRACKER, "Received location update");
       Bundle bundle = intent.getExtras();
       Location location = (Location) bundle.get(android.location.LocationManager
               .KEY_LOCATION_CHANGED);
