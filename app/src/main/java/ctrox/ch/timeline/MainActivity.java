@@ -197,6 +197,8 @@ public class MainActivity extends AppCompatActivity
   }
 
   private void displayLocationHistory(GoogleMap map, List<LocationRecord> locationList) {
+    // Clear current lines and points
+    map.clear();
     List<LatLng> points = new ArrayList<>();
     for (LocationRecord location : locationList) {
       points.add(location.getLatLng());
