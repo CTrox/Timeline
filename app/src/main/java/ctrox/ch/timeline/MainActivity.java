@@ -258,15 +258,11 @@ public class MainActivity extends AppCompatActivity
 
     for (LocationRecord location : locationList) {
       points.add(location.getLatLng());
-      map.addCircle(new CircleOptions()
-              .center(location.getLatLng())
-              .radius(location.getAccuracy())
-              .strokeColor(ContextCompat.getColor(getApplicationContext(), R.color.colorPrimaryTransparent)));
       builder.include(location.getLatLng());
     }
     Polyline line = map.addPolyline(new PolylineOptions()
-            .width(5)
-            .color(ContextCompat.getColor(getApplicationContext(), R.color.colorAccentTransparent)));
+            .width(10)
+            .color(ContextCompat.getColor(getApplicationContext(), R.color.colorAccent)));
     line.setPoints(points);
 
     if (!locationList.isEmpty()) {
