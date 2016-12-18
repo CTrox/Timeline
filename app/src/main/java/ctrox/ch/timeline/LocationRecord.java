@@ -12,6 +12,7 @@ class LocationRecord {
   private LatLng latLng;
   private Date datetime;
   private Double accuracy;
+  private Double sum;
 
   LatLng getLatLng() {
     return latLng;
@@ -19,6 +20,7 @@ class LocationRecord {
 
   void setLatLng(LatLng latLng) {
     this.latLng = latLng;
+    this.sum = latLng.latitude + latLng.longitude;
   }
 
   Date getDatetime() {
@@ -40,4 +42,9 @@ class LocationRecord {
   void setAccuracy(Double accuracy) {
     this.accuracy = accuracy;
   }
+
+  public Double getSum() {
+    return sum;
+  }
+
 }

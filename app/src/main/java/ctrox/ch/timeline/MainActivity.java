@@ -9,10 +9,13 @@ import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.support.design.widget.AppBarLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.view.ViewCompat;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 import android.support.design.widget.NavigationView;
@@ -23,6 +26,9 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
@@ -35,6 +41,7 @@ import com.couchbase.lite.Query;
 import com.couchbase.lite.QueryEnumerator;
 import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.android.AndroidContext;
+import com.github.sundeepk.compactcalendarview.CompactCalendarView;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
@@ -42,12 +49,15 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -62,8 +72,9 @@ public class MainActivity extends AppCompatActivity
   // minimum distance to trigger location updates in meters
   private static final int MIN_DISTANCE = 10;
   private static final int FINE_LOCATION_REQUEST = 242;
-
+  private boolean isExpanded = false;
   private Database mDatabase;
+  GoogleMap mMap;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -107,6 +118,38 @@ public class MainActivity extends AppCompatActivity
 
     NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
     navigationView.setNavigationItemSelectedListener(this);
+
+    RelativeLayout datePickerButton = (RelativeLayout) findViewById(R.id.date_picker_button);
+    final ImageView arrow = (ImageView) findViewById(R.id.date_picker_arrow);
+    final AppBarLayout appBarLayout = (AppBarLayout) findViewById(R.id.app_bar_layout);
+    datePickerButton.setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View v) {
+        toggleCalendar(appBarLayout, arrow);
+      }
+    });
+
+    // Set up the CompactCalendarView
+    CompactCalendarView compactCalendarView = (CompactCalendarView) findViewById(R.id
+            .compactcalendar_view);
+    compactCalendarView.setShouldDrawDaysHeader(true);
+    compactCalendarView.setCurrentDate(new Date());
+    compactCalendarView.setListener(new CompactCalendarView.CompactCalendarViewListener() {
+      @Override
+      public void onDayClick(Date dateClicked) {
+        toggleCalendar(appBarLayout, arrow);
+        if (mMap != null) {
+          displayLocationHistory(mMap, getLocationRecords(mDatabase,
+                  getStartOfDay(dateClicked).getTime(), getEndOfDay(dateClicked).getTime()));
+        }
+      }
+
+      @Override
+      public void onMonthScroll(Date firstDayOfNewMonth) {
+        // TODO
+      }
+
+    });
   }
 
   private boolean checkPermission() {
@@ -123,6 +166,18 @@ public class MainActivity extends AppCompatActivity
   @Override
   protected void onDestroy() {
     super.onDestroy();
+  }
+
+  private void toggleCalendar(AppBarLayout appBarLayout, ImageView arrow) {
+    if (isExpanded) {
+      ViewCompat.animate(arrow).rotation(0).start();
+      appBarLayout.setExpanded(false, true);
+      isExpanded = false;
+    } else {
+      ViewCompat.animate(arrow).rotation(180).start();
+      appBarLayout.setExpanded(true, true);
+      isExpanded = true;
+    }
   }
 
   private Database setupCouchbase() {
@@ -157,14 +212,13 @@ public class MainActivity extends AppCompatActivity
 
   @Override
   public void onMapReady(GoogleMap map) {
+    mMap = map;
     // Get location LatLng's from DB and display on map
-    displayLocationHistory(map, getLocationRecords(mDatabase, getStartOfDay(new Date()).getTime()
-            , getEndOfDay(new Date()).getTime()));
+    List<LocationRecord> locationRecords = getLocationRecords(mDatabase, getStartOfDay(new Date()).getTime()
+            , getEndOfDay(new Date()).getTime());
+    displayLocationHistory(map, locationRecords);
   }
 
-  private void animateMap(LatLng latLng, GoogleMap map) {
-    map.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16.0f));
-  }
 
   private List<LocationRecord> getLocationRecords(Database database, Long startTime, Long endTime) {
     Query query = database.getView("locations").createQuery();
@@ -200,20 +254,28 @@ public class MainActivity extends AppCompatActivity
     // Clear current lines and points
     map.clear();
     List<LatLng> points = new ArrayList<>();
+    LatLngBounds.Builder builder = new LatLngBounds.Builder();
+
     for (LocationRecord location : locationList) {
       points.add(location.getLatLng());
       map.addCircle(new CircleOptions()
               .center(location.getLatLng())
               .radius(location.getAccuracy())
               .strokeColor(ContextCompat.getColor(getApplicationContext(), R.color.colorPrimaryTransparent)));
+      builder.include(location.getLatLng());
     }
     Polyline line = map.addPolyline(new PolylineOptions()
             .width(5)
             .color(ContextCompat.getColor(getApplicationContext(), R.color.colorAccentTransparent)));
     line.setPoints(points);
-    if (points.size() > 0) {
-      // zoom map into the last point
-      animateMap(points.get(points.size() - 1), map);
+
+    if (!locationList.isEmpty()) {
+      // get size of display for camera
+      DisplayMetrics displaymetrics = new DisplayMetrics();
+      getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
+      // zoom camera so all location records are shown
+      map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), (int) (displaymetrics
+                .widthPixels * 0.8), (int) (displaymetrics.heightPixels * 0.8), 0));
     }
   }
 
