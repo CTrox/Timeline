@@ -26,6 +26,10 @@ import java.util.Map;
 public class LocationService extends IntentService {
   public static final String ACTION = "ACTION_LOCATION";
   private static final String TAG_LOCATIONTRACKER = "LocationTracker";
+  // minimum timeout for location updates
+  public static final int MIN_TIME = 0;
+  // minimum distance to trigger location updates in meters
+  public static final int MIN_DISTANCE = 10;
   private Database mDatabase;
 
   public LocationService() {

@@ -67,10 +67,6 @@ import java.util.Objects;
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener, OnMapReadyCallback {
   private static final String TAG = "MainActivity";
-  // minimum timeout for location updates
-  private static final int MIN_TIME = 0;
-  // minimum distance to trigger location updates in meters
-  private static final int MIN_DISTANCE = 10;
   private static final int FINE_LOCATION_REQUEST = 242;
   private boolean isExpanded = false;
   private Database mDatabase;
@@ -104,8 +100,8 @@ public class MainActivity extends AppCompatActivity
                   serviceIntent, PendingIntent.FLAG_CANCEL_CURRENT);
           LocationManager locationManager = (LocationManager) context.getSystemService(Context
                   .LOCATION_SERVICE);
-          locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, MIN_TIME, MIN_DISTANCE,
-                  pendingIntent);
+          locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER,
+                  LocationService.MIN_TIME, LocationService.MIN_DISTANCE, pendingIntent);
         }
       }
     });
