@@ -1,14 +1,17 @@
 package ctrox.ch.timeline;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.design.widget.AppBarLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -53,7 +56,14 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -85,7 +95,11 @@ public class MainActivity extends AppCompatActivity
 
     mDatabase = setupCouchbase();
     setupView(mDatabase);
-
+    try {
+      uglyExporter();
+    } catch (FileNotFoundException e) {
+      e.printStackTrace();
+    }
     FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
     fab.setOnClickListener(new View.OnClickListener() {
       @Override
@@ -359,5 +373,33 @@ public class MainActivity extends AppCompatActivity
     DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
     drawer.closeDrawer(GravityCompat.START);
     return true;
+  }
+
+
+  private void uglyExporter() throws FileNotFoundException {
+    Query query = mDatabase.getView("locations").createQuery();
+    QueryEnumerator result = null;
+    try {
+      result = query.run();
+    } catch (CouchbaseLiteException e) {
+      e.printStackTrace();
+    }
+    File file = new File("/storage/emulated/0/Android/data/ctrox.ch.timeline/", "location_history.json");
+    FileOutputStream fileOutputStream = new FileOutputStream(file, true);
+    PrintWriter pw = new PrintWriter(fileOutputStream);
+
+    for (int i = 0; i < result.getCount(); i++) {
+      Document document = result.getRow(i).getDocument();
+      Object timestamp = document.getProperty("timestamp");
+      Object latitude = document.getProperty("latitude");
+      Object longitude = document.getProperty("longitude");
+      Object accuracy = document.getProperty("accuracy");
+      String json = "{\"timestamp\": "+timestamp.toString()+",\"latitude\": " + latitude
+                .toString() + ",\"longitude\": " + longitude.toString() + ",\"accuracy\": " +
+                accuracy.toString() + "},";
+      pw.println(json);
+    }
+    pw.flush();
+    pw.close();
   }
 }
